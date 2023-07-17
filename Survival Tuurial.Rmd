@@ -1,10 +1,34 @@
 ---
-title: "Survival analysis with R"
-author: "Rajesh Majumder","Franciosalgeo"
-date: "16th June,2023"
-output: html_document
+title: "Survival Analysis on Heroin Addiction Data in R"
+author:
+- Rajesh Majumder
+- Franciosalgeo
+- St. John's Research Institute, Bangalore, India
+date: "15th July, 2023"
+output:
+  html_document:
+    toc: yes
+    toc_float:
+      collapsed: yes
+    toc_depth: 3
+    number_sections: yes
+  pdf_document:
+    toc: yes
+    toc_depth: '3'
 ---
-# Exercise:
+
+<style type="text/css">
+/* Whole document: */
+body{
+  font-family: Arial;
+  font-size: 13pt;
+}
+/* Headers */
+h1,h2,h3,h4,h5,h6{
+font-family: Poor Richard;
+  font-size: 20pt;
+}
+</style>
 
 ## Background:
 
@@ -18,14 +42,23 @@ A 1991 Australian study by **Caplehorn et al.**, compared retention in two metha
 -   Survival time -- in days
 -   Pris_rec -- Prison record (0 = none ; 1 = any)
 -   Depression- 0=No; 1=Yes
+-   LI-         Lung Injury
 -   Dose - Methadone dose (mg/day)
 
-## Reading data in R:
+
+## Reading data in R
 
 ```{r}
 setwd("C:\\Users\\rajesh.majumder\\Downloads\\Survival tutorial SJRI_15_07_23\\")
 data= read.csv("Addict.csv")
 ```
+
+## View data
+
+```{r}
+head(data,10)
+```
+
 
 ## Data Structure:
 
@@ -50,21 +83,13 @@ data$pris_rec= factor(data$pris_rec,levels=c(0,1),labels=c("none","any"))
 data$Depression= factor(data$Depression,levels = c(0,1),labels = c("yes","no"))
 ```
 
-## Visual Representation of Censored data:
-
-```{r}
-
-library(survRM2)
-obj = survRM2::rmst2(time = data$time,status = data$status_code,arm = data$clinic=="Clinic1",tau = 905)
-print(obj)
-```
-
 ## Required Libraries:
 
 ```{r,warning=FALSE,message=FALSE}
 library(survival)
 library(survminer)
 library(ggsurvfit)
+library(survRM2)
 ```
 
 ## visualization of the time distribution
@@ -131,18 +156,22 @@ box()
 
 ```{r}
 ##-- Simple Survival plot
-ggsurvplot(f1, data = data,linetype = "strata",pval = TRUE, conf.int = F,legend="top")+xlab("Years")
+ggsurvplot(f1, data = data, conf.int = T,legend="top")+xlab("Time")
 
 #surv.median.line = "hv"
+```
+Here, in the above this is the overall survival curve. But where is the Median Survival value? To draw it...
+
+```{r}
+ggsurvplot(f1, data = data, conf.int = T,legend="top",surv.median.line = "hv")+xlab("Time")
 ```
 
 Alternatively,
 
 ```{r}
 survfit2(Surv(time, status_code) ~ 1, data = data) %>%
-  ggsurvfit()+add_confidence_interval()+
+  ggsurvfit()+add_confidence_interval()+add_quantile(y_value = 0.5, color = "gray50", linewidth = 0.75)+
   labs(x="Time (Days)",y="Survival Probability")+
-  annotate("text", x=25, y=0.15, label= "P Value=0.22")+
   add_risktable(risktable_stats = c("n.risk","cum.event"),stats_label = list(n.risk = "Number at Risk",cum.event="Number of Events"))
 ```
 
@@ -153,15 +182,7 @@ f2=survfit(Surv(time, status_code)~clinic,data=data)
 print(f2,print.rmean = T)
 
 ## Survival  Plot
-ggsurvplot(f2, data = data,linetype = "strata",pval = TRUE, conf.int = F,legend="top")+xlab("Years")
-
-#,surv.median.line = "hv"
-
-
-
-#library(survRM2)
-survRM2::rmst2(time = data$time,status = data$status_code,arm = (data$clinic=="Clinic1")*1,tau = 905)
-max(data$time)
+ggsurvplot(f2, data = data,linetype = "strata",pval = TRUE, surv.median.line = "hv",conf.int = F,legend="top")+xlab("Years")
 ```
 
 Similarly we can also estimate retention probabilities for other factors:
@@ -169,7 +190,7 @@ Similarly we can also estimate retention probabilities for other factors:
 ```{r}
 ### For Prison record---:
 
-##-- Median Estimate with 95% C.I/
+##-- Median Estimate with 95% C.I
 f2=survfit(Surv(time, status_code)~pris_rec,data=data)
 f2
 ```
@@ -187,19 +208,11 @@ f3
 ```
 
 ```{r}
-ggsurvplot(f3, data = data,linetype = "strata",pval = TRUE, conf.int = F,surv.median.line = "hv",legend="top")+xlab("Years")
-```
-
-```{r}
 ### For LI record---:
 
 ##-- Median Estimate with 95% C.I/
 f4=survfit(Surv(time, status_code)~LI,data=data)
 f4
-```
-
-```{r}
-ggsurvplot(f4, data = data,linetype = "strata",pval = TRUE, conf.int = F,surv.median.line = "hv",legend="top")+xlab("Years")
 ```
 
 ```{r}
@@ -332,8 +345,8 @@ Note that, previously we have seen that Median survival for the clinic 1 was not
 In R to do this RMST:
 
 ```{r}
-library(survRM2)
-RMST_Clinic=survRM2::rmst2(time = data$time,status = data$status_code,arm = (data$clinic=="Clinic1")*1,tau = 905)
+#library(survRM2)
+RMST_Clinic=rmst2(time = data$time,status = data$status_code,arm = (data$clinic=="Clinic1")*1,tau = 905)
 RMST_Clinic
 ```
 
