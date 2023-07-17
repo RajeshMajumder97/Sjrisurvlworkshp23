@@ -1,0 +1,342 @@
+---
+title: "Survival analysis with R"
+author: "Rajesh Majumder","Franciosalgeo"
+date: "16th June,2023"
+output: html_document
+---
+# Exercise:
+
+## Background:
+
+A 1991 Australian study by **Caplehorn et al.**, compared retention in two methadone treatment clinics for heroin addicts. A patient's survival time $(T)$ was determined as the time in days until the patient dropped out of the clinic or was censored at the end of the study clinic. The two clinics differed according to their overall treatment policies.
+
+## Variable codes:
+
+-   I.D. of subject -- ranging from 1 to 266
+-   Clinic - 0 = Clinic 1 ; 1 = Clinic 2
+-   Status - 0 = Censored ; 1 = endpoint
+-   Survival time -- in days
+-   Pris_rec -- Prison record (0 = none ; 1 = any)
+-   Depression- 0=No; 1=Yes
+-   Dose - Methadone dose (mg/day)
+
+## Reading data in R:
+
+```{r}
+setwd("C:\\Users\\rajesh.majumder\\Downloads\\Survival tutorial SJRI_15_07_23\\")
+data= read.csv("Addict.csv")
+```
+
+## Data Structure:
+
+```{r}
+str(data)
+```
+
+## Reformation of the working data:
+
+```{r}
+## Re-labeling and converting to factor ##
+##-- clinic --##
+data$clinic= factor(data$clinic,levels=c(0,1),labels=c("Clinic1","Clinic2"))
+
+##--status--##
+data$status= factor(data$status,levels=c(0,1),labels=c("Censored","endpoint"))
+
+##--pris_rec--##
+data$pris_rec= factor(data$pris_rec,levels=c(0,1),labels=c("none","any"))
+
+##-- Depression --##
+data$Depression= factor(data$Depression,levels = c(0,1),labels = c("yes","no"))
+```
+
+## Visual Representation of Censored data:
+
+```{r}
+
+library(survRM2)
+obj = survRM2::rmst2(time = data$time,status = data$status_code,arm = data$clinic=="Clinic1",tau = 905)
+print(obj)
+```
+
+## Required Libraries:
+
+```{r,warning=FALSE,message=FALSE}
+library(survival)
+library(survminer)
+library(ggsurvfit)
+```
+
+## visualization of the time distribution
+
+-   Distribution of follow-up times is skewed, and may differ between censored patients and those with events. Follow-up times always positive.
+
+Let's draw the density plot(using Kernel density estimation technique) for Censored and Event.
+
+```{r}
+library(ggplot2)      
+ 
+# create density plot with desired colours
+ggplot(data, aes(x=time,fill=status,color=status)) + geom_density(
+                                         alpha=0.8)+facet_wrap(.~clinic)
+
+
+```
+
+## Q(1). Calculate the retention probabilities using Kaplan Meier and plot the survival and hazard plots.
+
+Now, Our interest is to estimate what is the retention probability at a certain time say $t$, which is nothing but Survival probability at a certain time,$S(t)$.
+
+The survival function, is the probability an individual survives (or, the probability that the event of interest does not occur) up to and including time $t$. It's the probability that the event (e.g., death) hasn't occured yet. It looks like this, where $T$ is the time of death, and $P(T>t)$ is the probability that the time of death is greater than some time $t$.
+
+There are various techniques to estimate this retention probability or survival probability, one of them is **Product Limit estimation/Kaplan-Meier** estimation.
+
+In R the `survfit()` function under `survival` package; estimates median survival with 95% C.I and creates survival curves based on a formula.
+
+```{r}
+## Estimated Median
+data$status_code= (data$status=="endpoint")*1
+f1=survfit(Surv(time, status_code)~1,data=data)
+f1
+```
+
+```{r}
+summary(f1)
+```
+
+We can give the `summary()` function an option for what times we want to show in the results.
+
+```{r}
+summary(f1,times = c(10,50,100,150,200,250,300,350,400))
+```
+
+Note that, by default R does not report mean survival. To get the mean survival:
+
+```{r}
+print(f1,print.rmean=T)
+```
+
+### Kaplan-Meier Plots:
+
+```{r}
+plot(f1,
+     xlab = "Time",
+     ylab="Retension Probability",
+     main="Overall Survival Probability ptot",
+     lwd=2)
+box()
+```
+
+### Cumulative Probability
+
+```{r}
+##-- Simple Survival plot
+ggsurvplot(f1, data = data,linetype = "strata",pval = TRUE, conf.int = F,legend="top")+xlab("Years")
+
+#surv.median.line = "hv"
+```
+
+Alternatively,
+
+```{r}
+survfit2(Surv(time, status_code) ~ 1, data = data) %>%
+  ggsurvfit()+add_confidence_interval()+
+  labs(x="Time (Days)",y="Survival Probability")+
+  annotate("text", x=25, y=0.15, label= "P Value=0.22")+
+  add_risktable(risktable_stats = c("n.risk","cum.event"),stats_label = list(n.risk = "Number at Risk",cum.event="Number of Events"))
+```
+
+## Q(2). Compare the retention probabilities between the two clinics using the appropriate test.
+
+```{r}
+f2=survfit(Surv(time, status_code)~clinic,data=data)
+print(f2,print.rmean = T)
+
+## Survival  Plot
+ggsurvplot(f2, data = data,linetype = "strata",pval = TRUE, conf.int = F,legend="top")+xlab("Years")
+
+#,surv.median.line = "hv"
+
+
+
+#library(survRM2)
+survRM2::rmst2(time = data$time,status = data$status_code,arm = (data$clinic=="Clinic1")*1,tau = 905)
+max(data$time)
+```
+
+Similarly we can also estimate retention probabilities for other factors:
+
+```{r}
+### For Prison record---:
+
+##-- Median Estimate with 95% C.I/
+f2=survfit(Surv(time, status_code)~pris_rec,data=data)
+f2
+```
+
+```{r}
+ggsurvplot(f2, data = data,linetype = "strata",pval = TRUE, conf.int = F,surv.median.line = "hv",legend="top")+xlab("Years")
+```
+
+```{r}
+### For Dose---:
+
+##-- Median Estimate with 95% C.I
+f3=survfit(Surv(time, status_code)~dose,data=data)
+f3
+```
+
+```{r}
+ggsurvplot(f3, data = data,linetype = "strata",pval = TRUE, conf.int = F,surv.median.line = "hv",legend="top")+xlab("Years")
+```
+
+```{r}
+### For LI record---:
+
+##-- Median Estimate with 95% C.I/
+f4=survfit(Surv(time, status_code)~LI,data=data)
+f4
+```
+
+```{r}
+ggsurvplot(f4, data = data,linetype = "strata",pval = TRUE, conf.int = F,surv.median.line = "hv",legend="top")+xlab("Years")
+```
+
+```{r}
+### For Depression---:
+
+##-- Median Estimate with 95% C.I/
+f5=survfit(Surv(time, status_code)~Depression,data=data)
+f5
+```
+
+```{r}
+ggsurvplot(f5, data = data,linetype = "strata",pval = TRUE, conf.int = F,surv.median.line = "hv",legend="top")+xlab("Years")
+```
+
+When there are more than 1 survival curves for number of groups $k\;|;where\:\:k\geq2$, we need to perform a statistical significant test between those survival curves. As, $S(t)$ is a probability function, so, **Log Rank test statistic** is approximately distributed as a chi-square test statistic with d.f. 1.
+
+So the comparison of retention probabilities between Clinics:
+
+### Log Rank Test
+
+```{r}
+test= survdiff(Surv(time,status_code)~clinic,data=data)
+test
+```
+
+The Chi-Squared test statistic is 28.1 with 1 degree of freedom and the corresponding p-value is \<0.001. Since this p-value is less than 0.001, we reject the null hypothesis,i.e., $H_0: \text{in terms of retention, there is no difference between two clinics.}$.
+
+In other words, we have sufficient evidence to say that there is a statistically significant difference for retention between the Clinic 1 & Clinic 2.
+
+To, extract the p-value from `survdiff` we use the following trick:
+
+```{r}
+p.val= 1 - pchisq(test$chisq, length(test$n) - 1)
+
+round(p.val,3)
+```
+
+similarly, the log-rank test for other covariates:
+
+```{r}
+test= survdiff(Surv(time,status_code)~pris_rec,data=data)
+print("Prison record:--")
+test
+```
+
+```{r}
+test= survdiff(Surv(time,status_code)~dose,data=data)
+print("Dose:--")
+test
+```
+
+```{r}
+test= survdiff(Surv(time,status_code)~LI,data=data)
+print("LI:--")
+test
+```
+
+```{r}
+test= survdiff(Surv(time,status_code)~Depression,data=data)
+print("Depression:--")
+test
+```
+
+## Q(3). Check for the Proportional Hazards assumption for each of the independent variables using-- (i)Log log survival plot, (ii)Plot Schoenfeld residuals
+
+Kaplan-Meier curves are good for visualizing differences in survival between two categorical groups, but they don't work well for assessing the effect of quantitative variables like age, gene expression, leukocyte count, etc. Cox PH regression can assess the effect of both categorical and continuous variables, and can model the effect of multiple variables at once.
+
+Let,
+
+```{r}
+Mod1=coxph(Surv(time,status_code)~Depression,data=data)
+summary(Mod1)
+```
+
+The `exp(coef)` column contains $e^{\beta}$. This is the adjusted **hazard ratio** (in our case HR of clinic adjusted for dose =3.502) -- the multiplicative effect of that variable on the hazard rate (for each unit increase in that variable). So, for the categorical variable like clinic, at a given instant in time, someone who was diagnosed in clinic 2 is 2.6 times as likely to get event of interest as someone who was diagnosed in clinic 1 adjusting for dose.
+
+Note that, **Likelihood ratio test**, **Wald test** and **Score test** are the values of the test statistics for testing of hypothesis: $H_0:\text{All}\:\:\beta_s \:\:=0$.
+
+These give the evidence of overall model significance.
+
+Note that the Concordance value is= 66%(0.66) which gives the model accuracy. Just like for logistic regression; AUC.
+
+## Testing proportional Hazards assumption : Log-log plot
+
+```{r}
+plot(survfit(Surv(time, status_code) ~ Depression,data = data), col=c("black", "red"), fun="cloglog",
+     xlab = "Time",ylab = "log(-log(S(t)))",main="Log-Log plot to check PH Assumption")
+
+```
+
+Note that, the two curves are not overlapped, that means the proportional Hazard assumption is hold.
+
+## Testing proportional Hazards assumption : Schoenfeld residuals
+
+```{r}
+Mod2=coxph(Surv(time,status_code)~dose,data=data)
+summary(Mod2)
+```
+
+-   Here, $H_0:\text{HAZARDs are proportional  a.g.,}\:\:H_1:\text{HAZARDs are NOT proportional}$
+
+-   It will return test for each X and for overall model.
+
+To test for the proportional-hazards (PH) assumption, type this:
+
+```{r}
+cox.zph(Mod2)
+```
+
+```{r}
+plot(cox.zph(Mod2))
+abline(h=0,col="red")
+```
+
+```{r}
+Mod3= coxph(Surv(time,status_code)~dose+Depression,data=data)
+summary(Mod3)
+```
+
+```{r}
+cox.zph(Mod3)
+```
+
+## Restricted Mean Survival:
+
+Restricted mean survival time (RMST) is suggested as a novel alternative measure in survival analyses and may be useful when proportional hazards assumption cannot be made or when event rate is low.
+
+Note that, previously we have seen that Median survival for the clinic 1 was not converged. So in this kind of scenario RMST are mostly used.
+
+In R to do this RMST:
+
+```{r}
+library(survRM2)
+RMST_Clinic=survRM2::rmst2(time = data$time,status = data$status_code,arm = (data$clinic=="Clinic1")*1,tau = 905)
+RMST_Clinic
+```
+
+-   To get better understanding about RMST, go [click here](https://cran.r-project.org//web//packages//survRM2//vignettes//survRM2-vignette3-2.html)
+
+-   For more details: [click here](https://rajeshmajumderblog.netlify.app//blog//internal-project_viii//)
